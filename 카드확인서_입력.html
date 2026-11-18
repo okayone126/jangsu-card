@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>법인카드 사용 확인</title>
+
+<!-- Firebase SDK -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+
+<style>
+  :root {
+    --navy: #1B2A4A;
+    --accent: #E8650A;
+    --accent-light: #FDF0E8;
+    --gray-1: #F7F8FA;
+    --gray-2: #E8ECF2;
+    --gray-3: #B0BAC8;
+    --gray-4: #6B7A92;
+    --text: #1A2035;
+    --white: #FFFFFF;
+    --green: #1A8A5A;
+    --green-light: #E8F7F1;
+    --red: #C0392B;
+    --border: #D8DFE8;
+    --radius: 10px;
+    --shadow: 0 2px 12px rgba(27,42,74,0.10);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif;
+    background: var(--gray-1); color: var(--text); font-size: 14px;
+    min-height: 100vh;
+  }
+
+  header {
+    background: var(--navy); color: var(--white);
+    padding: 16px 20px; text-align: center;
+  }
+  header h1 { font-size: 17px; font-weight: 700; }
+  header p { font-size: 12px; color: var(--gray-3); margin-top: 4px; }
+
+  .container { max-width: 600px; margin: 0 auto; padding: 20px 16px 40px; }
+
+  .state-box {
+    background: var(--white); border-radius: var(--radius);
+    padding: 40px 20px; text-align: center;
+    box-shadow: var(--shadow); margin-top: 20px;
+  }
+  .state-box .icon { font-size: 40px; margin-bottom: 12px; }
+  .state-box h2 { font-size: 16px; margin-bottom: 8px; }
+  .state-box p { color: var(--gray-4); font-size: 13px; line-height: 1.6; }
+
+  .info-card {
+    background: var(--white); border-radius: var(--radius);
+    padding: 18px 20px; margin-bottom: 16px;
+    box-shadow: var(--shadow);
+    border-left: 4px solid var(--accent);
+  }
+  .info-card .holder-name { font-size: 18px; font-weight: 700; margin-bottom: 4px; }
+  .info-card .period { color: var(--gray-4); font-size: 12px; }
+  .info-card .stats {
+    display: flex; gap: 16px; margin-top: 12px;
+    padding-top: 12px; border-top: 1px solid var(--border);
+  }
+  .info-card .stat { text-align: center; }
+  .info-card .stat-num { font-size: 18px; font-weight: 700; color: var(--navy); }
+  .info-card .stat-label { font-size: 11px; color: var(--gray-4); margin-top: 2px; }
+
+  .progress-wrap { margin-bottom: 20px; }
+  .progress-bar-bg { background: var(--gray-2); border-radius: 4px; height: 8px; }
+  .progress-bar { background: var(--green); height: 8px; border-radius: 4px; transition: width 0.4s; }
+  .progress-text { display: flex; justify-content: space-between; font-size: 12px; color: var(--gray-4); margin-top: 5px; }
+
+  .tx-card {
+    background: var(--white); border-radius: var(--radius);
+    padding: 16px; margin-bottom: 12px;
+    box-shadow: var(--shadow); border: 1px solid var(--border);
+    transition: border-color 0.2s;
+  }
+  .tx-card.done { border-color: var(--green); }
+  .tx-card.done .tx-head { opacity: 0.7; }
+
+  .tx-head { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px; }
+  .tx-date { font-size: 11px; color: var(--gray-4); }
+  .tx-store { font-size: 15px; font-weight: 600; margin-top: 2px; }
+  .tx-amount { font-size: 16px; font-weight: 700; color: var(--accent); white-space: nowrap; }
+
+  .done-badge {
+    display: none; background: var(--green); color: white;
+    font-size: 11px; padding: 2px 8px; border-radius: 20px; font-weight: 600;
+  }
+  .tx-card.done .done-badge { display: inline-block; }
+  .tx-card.done .form-row { display: none; }
+
+  .form-row { display: flex; flex-direction: column; gap: 8px; }
+  .form-group { display: flex; flex-direction: column; gap: 4px; }
+  .form-group label { font-size: 11px; color: var(--gray-4); font-weight: 600; }
+  .form-group select,
+  .form-group input {
+    border: 1px solid var(--border); border-radius: 6px;
+    padding: 8px 10px; font-size: 13px; font-family: inherit;
+    background: var(--gray-1); color: var(--text);
+    width: 100%;
+  }
+  .form-group select:focus,
+  .form-group input:focus {
+    outline: none; border-color: var(--navy); background: var(--white);
+  }
+
+  .form-row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+
+  .btn-edit {
+    margin-top: 8px; width: 100%; padding: 7px;
+    background: transparent; color: var(--gray-4);
+    border: 1px solid var(--border); border-radius: 6px;
+    font-size: 12px; cursor: pointer; font-family: inherit;
+  }
+
+  .submit-all-wrap { margin-top: 24px; text-align: center; }
+  .btn-submit-all {
+    padding: 14px 40px; background: var(--green); color: var(--white);
+    border: none; border-radius: 8px; font-size: 15px; font-weight: 700;
+    cursor: pointer; font-family: inherit; box-shadow: var(--shadow);
+  }
+  .btn-submit-all:disabled { background: var(--gray-3); cursor: default; }
+  .submit-hint { font-size: 12px; color: var(--gray-4); margin-top: 8px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🏢 장수플랜트 법인카드 사용 확인</h1>
+  <p>항목, 현장명, 사용목적을 입력해 주세요</p>
+</header>
+
+<div class="container">
+  <div id="loading-screen" class="state-box">
+    <div class="icon">⏳</div>
+    <h2>데이터 불러오는 중...</h2>
+  </div>
+
+  <div id="error-screen" class="state-box" style="display:none;">
+    <div class="icon">❌</div>
+    <h2>링크가 올바르지 않습니다</h2>
+    <p>관리자에게 올바른 링크를 요청해주세요.</p>
+  </div>
+
+  <div id="already-done-screen" class="state-box" style="display:none;">
+    <div class="icon">✅</div>
+    <h2>이미 제출 완료되었습니다</h2>
+    <p>모든 항목이 제출되었습니다.<br>수정이 필요하면 관리자에게 문의해주세요.</p>
+  </div>
+
+  <div id="input-screen" style="display:none;">
+    <div class="info-card">
+      <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+        <div>
+          <div class="holder-name" id="holder-name-display"></div>
+          <div class="period" id="period-display"></div>
+        </div>
+      </div>
+      <div class="stats">
+        <div class="stat">
+          <div class="stat-num" id="stat-total">0</div>
+          <div class="stat-label">전체 건수</div>
+        </div>
+        <div class="stat">
+          <div class="stat-num" id="stat-done" style="color:var(--green);">0</div>
+          <div class="stat-label">입력 완료</div>
+        </div>
+        <div class="stat">
+          <div class="stat-num" id="stat-remain" style="color:var(--accent);">0</div>
+          <div class="stat-label">남은 항목</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="progress-wrap">
+      <div class="progress-bar-bg">
+        <div class="progress-bar" id="progress-bar" style="width:0%"></div>
+      </div>
+      <div class="progress-text">
+        <span>진행률</span>
+        <span id="progress-text">0%</span>
+      </div>
+    </div>
+
+    <div id="tx-list"></div>
+
+    <div class="submit-all-wrap">
+      <button class="btn-submit-all" id="btn-submit-all" onclick="submitAll()">✅ 전체 제출 완료</button>
+      <p class="submit-hint">모든 항목 입력 후 제출해주세요</p>
+    </div>
+  </div>
+
+  <div id="done-screen" class="state-box" style="display:none;">
+    <div class="icon">🎉</div>
+    <h2>제출 완료!</h2>
+    <p>감사합니다. 모든 항목이 저장되었습니다.<br>관리자에게 자동으로 반영됩니다.</p>
+  </div>
+</div>
+
+<script>
+const firebaseConfig = {
+  apiKey: "AIzaSyC6EgtWDdMLTU_KEahZdQfY7QfpgLroBnY",
+  authDomain: "jangsu-card.firebaseapp.com",
+  projectId: "jangsu-card",
+  storageBucket: "jangsu-card.firebasestorage.app",
+  messagingSenderId: "301336870711",
+  appId: "1:301336870711:web:2b4febc806c3eb723964b2"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+
+const params = new URLSearchParams(location.search);
+const requestId = params.get('id');
+
+let txList = [];
+let holderName = '';
+let period = '';
+
+async function init() {
+  if (!requestId) { showError(); return; }
+  try {
+    const doc = await db.collection('confirmRequests').doc(requestId).get();
+    if (!doc.exists) { showError(); return; }
+    const data = doc.data();
+    holderName = data.holder;
+    period = data.period;
+    txList = data.transactions || [];
+    if (data.submitted) { showAlreadyDone(); return; }
+    renderInputScreen();
+  } catch (e) {
+    console.error(e);
+    showError();
+  }
+}
+
+function showError() {
+  document.getElementById('loading-screen').style.display = 'none';
+  document.getElementById('error-screen').style.display = 'block';
+}
+function showAlreadyDone() {
+  document.getElementById('loading-screen').style.display = 'none';
+  document.getElementById('already-done-screen').style.display = 'block';
+}
+
+function renderInputScreen() {
+  document.getElementById('loading-screen').style.display = 'none';
+  document.getElementById('input-screen').style.display = 'block';
+  document.getElementById('holder-name-display').textContent = holderName + ' 님';
+  document.getElementById('period-display').textContent = '📅 ' + period;
+  updateStats();
+  renderTxList();
+}
+
+function updateStats() {
+  const total = txList.length;
+  const done = txList.filter(t => t.cat && t.cat !== '').length;
+  const remain = total - done;
+  document.getElementById('stat-total').textContent = total;
+  document.getElementById('stat-done').textContent = done;
+  document.getElementById('stat-remain').textContent = remain;
+  const pct = total > 0 ? Math.round(done / total * 100) : 0;
+  document.getElementById('progress-bar').style.width = pct + '%';
+  document.getElementById('progress-text').textContent = pct + '%';
+  document.getElementById('btn-submit-all').disabled = remain > 0;
+}
+
+const CATS = ['식대', '유류비', '주차비', '자재', '기타경비'];
+
+function renderTxList() {
+  const container = document.getElementById('tx-list');
+  container.innerHTML = '';
+  txList.forEach((tx, i) => {
+    const isDone = tx.cat && tx.cat !== '';
+    const card = document.createElement('div');
+    card.className = 'tx-card' + (isDone ? ' done' : '');
+    card.id = 'tx-' + i;
+    card.innerHTML = `
+      <div class="tx-head">
+        <div>
+          <div class="tx-date">${tx.date}</div>
+          <div class="tx-store">${tx.store}</div>
+        </div>
+        <div style="text-align:right;">
+          <div class="tx-amount">${tx.amount.toLocaleString()}원</div>
+          <span class="done-badge">✓ 완료</span>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-row-2">
+          <div class="form-group">
+            <label>항목 *</label>
+            <select id="cat-${i}" onchange="autoSave(${i})">
+              <option value="">-- 선택 --</option>
+              ${CATS.map(c => `<option value="${c}" ${tx.cat===c?'selected':''}>${c}</option>`).join('')}
+            </select>
+          </div>
+          <div class="form-group">
+            <label>현장명</label>
+            <input type="text" id="site-${i}" value="${tx.site||''}" placeholder="현장명 입력" oninput="autoSave(${i})">
+          </div>
+        </div>
+        <div class="form-group">
+          <label>사용목적</label>
+          <input type="text" id="purpose-${i}" value="${tx.purpose||''}" placeholder="예) 현장 직원 중식" oninput="autoSave(${i})">
+        </div>
+        <div class="form-group">
+          <label>참석자</label>
+          <input type="text" id="attendees-${i}" value="${tx.attendees||''}" placeholder="예) 홍길동 외 3명" oninput="autoSave(${i})">
+        </div>
+      </div>
+      ${isDone ? `<button class="btn-edit" onclick="editTx(${i})">✏️ 수정하기</button>` : ''}
+    `;
+    container.appendChild(card);
+  });
+}
+
+let saveTimers = {};
+function autoSave(i) {
+  clearTimeout(saveTimers[i]);
+  saveTimers[i] = setTimeout(() => saveTx(i), 800);
+}
+
+async function saveTx(i) {
+  const cat = document.getElementById('cat-' + i)?.value || '';
+  const site = document.getElementById('site-' + i)?.value || '';
+  const purpose = document.getElementById('purpose-' + i)?.value || '';
+  const attendees = document.getElementById('attendees-' + i)?.value || '';
+  txList[i] = { ...txList[i], cat, site, purpose, attendees };
+  try {
+    await db.collection('confirmRequests').doc(requestId).update({
+      transactions: txList,
+      lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
+    });
+  } catch(e) { console.error('저장 실패:', e); }
+  const card = document.getElementById('tx-' + i);
+  if (cat) {
+    card.className = 'tx-card done';
+    const existEdit = card.querySelector('.btn-edit');
+    if (!existEdit) {
+      const editBtn = document.createElement('button');
+      editBtn.className = 'btn-edit';
+      editBtn.textContent = '✏️ 수정하기';
+      editBtn.onclick = () => editTx(i);
+      card.appendChild(editBtn);
+    }
+  } else {
+    card.className = 'tx-card';
+  }
+  updateStats();
+}
+
+function editTx(i) {
+  const card = document.getElementById('tx-' + i);
+  card.className = 'tx-card';
+  const editBtn = card.querySelector('.btn-edit');
+  if (editBtn) editBtn.remove();
+  document.getElementById('cat-' + i)?.focus();
+}
+
+async function submitAll() {
+  if (!confirm('모든 항목을 제출할까요? 제출 후에는 수정이 불가능합니다.')) return;
+  try {
+    await db.collection('confirmRequests').doc(requestId).update({
+      submitted: true,
+      submittedAt: firebase.firestore.FieldValue.serverTimestamp(),
+      transactions: txList
+    });
+    document.getElementById('input-screen').style.display = 'none';
+    document.getElementById('done-screen').style.display = 'block';
+  } catch(e) {
+    alert('제출 중 오류가 발생했습니다. 다시 시도해주세요.');
+  }
+}
+
+init();
+</script>
+</body>
+</html>
