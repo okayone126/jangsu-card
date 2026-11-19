@@ -220,13 +220,19 @@ const requestId = params.get('id');
 let txList = [];
 let holderName = '';
 let period = '';
+let siteNames = []; // Firebase에서 불러온 현장 목록
 
 async function init() {
   if (!requestId) { showError(); return; }
   try {
-    const doc = await db.collection('confirmRequests').doc(requestId).get();
-    if (!doc.exists) { showError(); return; }
-    const data = doc.data();
+    // 현장 목록과 거래 내역 병렬 로드
+    const [siteDoc, txDoc] = await Promise.all([
+      db.collection('meta').doc('sites').get(),
+      db.collection('confirmRequests').doc(requestId).get()
+    ]);
+    if (siteDoc.exists) siteNames = siteDoc.data().names || [];
+    if (!txDoc.exists) { showError(); return; }
+    const data = txDoc.data();
     holderName = data.holder;
     period = data.period;
     txList = data.transactions || [];
@@ -301,7 +307,13 @@ function renderTxList() {
           </div>
           <div class="form-group">
             <label>현장명</label>
-            <input type="text" id="site-${i}" value="${tx.site||''}" placeholder="현장명 입력" oninput="autoSave(${i})">
+            <select id="site-${i}" onchange="onSiteChange(${i})" style="border:1px solid var(--border);border-radius:6px;padding:8px 10px;font-size:13px;font-family:inherit;background:var(--gray-1);color:var(--text);width:100%;">
+              <option value="">-- 선택 --</option>
+              ${siteNames.map(n => `<option value="${n}" ${tx.site===n?'selected':''}>${n}</option>`).join('')}
+              <option value="__direct__" ${tx.site && !siteNames.includes(tx.site)?'selected':''}>직접 입력</option>
+            </select>
+            <input type="text" id="site-direct-${i}" value="${tx.site && !siteNames.includes(tx.site)?tx.site:''}" placeholder="현장명 직접 입력" oninput="autoSave(${i})"
+              style="margin-top:6px;border:1px solid var(--border);border-radius:6px;padding:8px 10px;font-size:13px;font-family:inherit;background:var(--gray-1);color:var(--text);width:100%;display:${tx.site && !siteNames.includes(tx.site)?'block':'none'};">
           </div>
         </div>
         <div class="form-group">
@@ -319,6 +331,19 @@ function renderTxList() {
   });
 }
 
+function onSiteChange(i) {
+  const sel = document.getElementById('site-' + i);
+  const directInput = document.getElementById('site-direct-' + i);
+  if (sel.value === '__direct__') {
+    directInput.style.display = 'block';
+    directInput.focus();
+  } else {
+    directInput.style.display = 'none';
+    directInput.value = '';
+    autoSave(i);
+  }
+}
+
 let saveTimers = {};
 function autoSave(i) {
   clearTimeout(saveTimers[i]);
@@ -327,10 +352,20 @@ function autoSave(i) {
 
 async function saveTx(i) {
   const cat = document.getElementById('cat-' + i)?.value || '';
-  const site = document.getElementById('site-' + i)?.value || '';
+  const selSite = document.getElementById('site-' + i)?.value || '';
+  const directSite = document.getElementById('site-direct-' + i)?.value || '';
+  // 직접입력이면 메모에 저장, site는 빈값으로
+  const site = selSite === '__direct__' ? '' : selSite;
+  const siteNote = selSite === '__direct__' ? directSite : '';
   const purpose = document.getElementById('purpose-' + i)?.value || '';
   const attendees = document.getElementById('attendees-' + i)?.value || '';
-  txList[i] = { ...txList[i], cat, site, purpose, attendees };
+  // 메모: 직접입력 현장명이 있으면 앞에 붙임
+  // 직접입력 → [현장:XXX]를 메모에 저장. 드롭다운 선택 시 기존 [현장:] 메모는 지움
+  const prevMemo = txList[i].memo || '';
+  const memo = siteNote
+    ? `[현장:${siteNote}]`
+    : prevMemo.startsWith('[현장:') ? '' : prevMemo;
+  txList[i] = { ...txList[i], cat, site, purpose, attendees, memo };
   try {
     await db.collection('confirmRequests').doc(requestId).update({
       transactions: txList,
@@ -338,7 +373,9 @@ async function saveTx(i) {
     });
   } catch(e) { console.error('저장 실패:', e); }
   const card = document.getElementById('tx-' + i);
-  if (cat) {
+  // 현재 포커스가 이 카드 안에 있으면 접지 않음
+  const hasFocus = card.contains(document.activeElement);
+  if (cat && !hasFocus) {
     card.className = 'tx-card done';
     const existEdit = card.querySelector('.btn-edit');
     if (!existEdit) {
@@ -348,7 +385,7 @@ async function saveTx(i) {
       editBtn.onclick = () => editTx(i);
       card.appendChild(editBtn);
     }
-  } else {
+  } else if (!cat) {
     card.className = 'tx-card';
   }
   updateStats();
